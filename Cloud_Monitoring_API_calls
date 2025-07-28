@@ -1,0 +1,77 @@
+
+"""
+This code uses Locust to load user tests sequentially on to the app. During the tests every 10 seconds 
+it will  retrieve Cloud Monitoring metrics per test, and export the average of the respective metric
+after each test
+"""
+
+import os
+import csv
+import requests
+from collections import defaultdict
+import datetime as dt
+
+
+# TEST PARAMETERS
+PROJECT_ID = "lofty-apex-465013-v3"   # Actual Project_ID in GCP 
+BASE_URL = (
+    f"https://monitoring.googleapis.com/v1/projects/{PROJECT_ID}"
+    "/location/global/prometheus/api/v1"
+)
+STEP = "10s"      # Every 10 seconds it will pull a sample of the  GCP system metric from Prometheus 
+CSV_FILE = "boutique_metrics_averaged.csv"   #Export the file to my lptop  this name
+
+LOCUST_FILE = "locustfile.py"
+HOST_URL = "http://34.77.57.129"  
+
+TEST_RAMP_UP = 120      # This is period users are spawned onto the e-commerce website 
+TEST_DURATION = 180     #this is the total test period   so given RAMP_UP is 120 sec, then there is a 60 second stable period  
+
+USER_TESTS = tuple(range(1530, 1025, -5))
+
+
+
+QUERIES = {
+    "cpu_usage": "sum by(pod) (rate(container_cpu_usage_seconds_total{namespace=\"boutique\", pod=~\"frontend.*\", container!=\"POD\"}[1m]))",
+    "throttled_periods": "sum by(pod) (rate(container_cpu_cfs_throttled_periods_total{namespace=\"boutique\", pod=~\"frontend.*\", container!=\"POD\"}[1m]))",
+    "cfs_total_periods": "sum by(pod) (rate(container_cpu_cfs_periods_total{namespace=\"boutique\", pod=~\"frontend.*\", container!=\"POD\"}[1m]))",
+    "memory_working_set_bytes": "sum by(pod) (container_memory_working_set_bytes{namespace=\"boutique\", pod=~\"frontend.*\", container!=\"POD\"})",
+    "memory_rss_avg_1m": "sum by(pod) (avg_over_time(container_memory_rss{namespace=\"boutique\", pod=~\"frontend.*\", container!=\"POD\"}[1m]))",
+    "rec_bytes_per_sec": "sum by(pod) (rate(container_network_receive_bytes_total{namespace=\"boutique\", pod=~\"frontend.*\", container!=\"POD\"}[1m]))",
+    ##"rec_packets_dropped_per_sec": "sum by(pod) (rate(container_network_receive_packets_dropped_total{namespace=\"boutique\", pod=~\"frontend.*\", container!=\"POD\"}[1m]))",
+    "rec_packets_per_sec": "sum by(pod) (rate(container_network_receive_packets_total{namespace=\"boutique\", pod=~\"frontend.*\", container!=\"POD\"}[1m]))",
+    "trans_bytes_per_sec": "sum by(pod) (rate(container_network_transmit_bytes_total{namespace=\"boutique\", pod=~\"frontend.*\", container!=\"POD\"}[1m]))",
+    ##"trans_packets_dropped_per_sec": "sum by(pod) (rate(container_network_transmit_packets_dropped_total{namespace=\"boutique\", pod=~\"frontend.*\", container!=\"POD\"}[1m]))",
+    "trans_packets_per_sec": "sum by(pod) (rate(container_network_transmit_packets_total{namespace=\"boutique\", pod=~\"frontend.*\", container!=\"POD\"}[1m]))",
+}
+
+
+# get_token retrieves  and returns an authentication token that is used to gain access to Google Cloud resources.
+def get_token() -> str:
+    token = os.popen("gcloud auth application-default print-access-token").read().strip()
+    if not token:
+        raise RuntimeError(" ERROR IN AUTHENTICATICATION, login to authenticate.")
+    return token
+
+
+#
+def promql_range(query: str, start: str, end: str, step: str = STEP):
+    resp = requests.get(
+        f"{BASE_URL}/query_range",
+        params={"query": query, "start": start, "end": end, "step": step},
+        headers={"Authorization": f"Bearer {get_token()}"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+
+#  MAIN 
+def main():
+   
+
+    print(f"\n All averaged metrics saved to THIS FILE: {CSV_FILE}")
+
+if __name__ == "__main__":
+    main()
