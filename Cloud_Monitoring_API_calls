@@ -10,6 +10,7 @@ import csv
 import requests
 from collections import defaultdict
 import datetime as dt
+import statistics
 
 
 # TEST PARAMETERS
@@ -66,6 +67,30 @@ def promql_range(query: str, start: str, end: str, step: str = STEP):
     return resp.json()
 
 
+def get_average_metrics(user_count: int, start_time: dt.datetime, end_time: dt.datetime):
+    print(f" Retrieving & calculating the average for metrics for {user_count} users")
+    start_str = start_time.isoformat() + "Z"
+    end_str = end_time.isoformat() + "Z"
+
+    all_values = defaultdict(list)
+
+    for metric_name, promql in QUERIES.items():
+        print(f" Running metrics Query {metric_name}")
+        result = promql_range(promql, start_str, end_str)
+        for series in result.get("data", {}).get("result", []):
+            for timestamp, val in series["values"]:
+                try:
+                    all_values[metric_name].append(float(val))
+                except ValueError:
+                    continue
+
+  # Calculating the average for each metric for the given user count
+    average_row = {"user_test_amount": user_count}
+    for metric in QUERIES:
+        values = all_values.get(metric, [])
+        average_row[metric] = round(statistics.mean(values), 6) if values else 0.0
+
+    return average_row
 
 #  MAIN 
 def main():
